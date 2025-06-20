@@ -18,6 +18,7 @@ class Video(models.Model):
     description = models.TextField()
     video_file = models.FileField(upload_to='videos/')
     order = models.PositiveIntegerField(default=0)
+    is_deleted = models.BooleanField(default=False)  # soft delete
     status = models.CharField(max_length=10, choices=VIDEO_STATUS, default='draft')
     quiz_timer_seconds = models.PositiveIntegerField(default=60)
 
