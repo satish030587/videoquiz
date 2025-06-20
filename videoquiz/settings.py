@@ -39,6 +39,8 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 
     'core',
+
+    'ckeditor',
 ]
 
 MIDDLEWARE = [
@@ -122,6 +124,9 @@ STATICFILES_DIRS = [ BASE_DIR / 'static' ]
 TEMPLATES[0]['DIRS'] = [ BASE_DIR / 'core' / 'templates' ]
 
 LOGIN_URL = '/login/'
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

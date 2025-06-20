@@ -4,9 +4,6 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from .forms import RegisterForm
 
-def home(request):
-    return render(request, 'base.html')
-
 def register_view(request):
     if request.method == 'POST':
         form = RegisterForm(request.POST)
@@ -33,6 +30,10 @@ def logout_view(request):
     logout(request)
     return redirect('login')
 
-@login_required
+@login_required(login_url='login')
 def dashboard_view(request):
     return render(request, 'core/dashboard.html')
+
+@login_required
+def quiz_view(request, video_id):
+    return render(request, 'core/quiz.html', {'video_id': video_id})
