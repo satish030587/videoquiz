@@ -8,3 +8,7 @@ class RegisterForm(UserCreationForm):
     class Meta:
         model = User
         fields = ['username', 'email', 'password1', 'password2']
+
+class QuizAnswerForm(forms.Form):
+    question_id = forms.IntegerField(widget=forms.HiddenInput())
+    selected_answer = forms.IntegerField(widget=forms.RadioSelect)

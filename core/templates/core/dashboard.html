@@ -1,5 +1,49 @@
 {% extends 'base.html' %}
 {% block content %}
-<h2>User Dashboard</h2>
-<p>Welcome {{ user.username }}! You are logged in.</p>
+
+<h2>Welcome, {{ user.username }}</h2>
+<p>
+  Total Videos: {{ stats.total }} |
+  Passed: {{ stats.passed }} |
+  Failed: {{ stats.failed }} |
+  Not Attempted: {{ stats.not_attempted }}
+</p>
+<hr>
+
+{% for item in video_data %}
+  <div style="border:1px solid #ddd; padding:10px; margin-bottom:10px;">
+    <h3>{{ item.video.order }}. {{ item.video.title }}</h3>
+    <p>{{ item.video.description }}</p>
+
+    <!-- ✨ Step 2: Status Badge -->
+    {% if item.status == 'locked' %}
+      <span style="color:gray;">🔒 Locked</span>
+    {% elif item.status == 'not_attempted' and item.can_start %}
+      <span style="color:orange;">➕ Not Attempted</span>
+    {% elif item.status == 'passed' %}
+      <span style="color:green;">✅ Passed
+        {% if item.score is not None and item.percentage is not None %}
+          | Score: {{ item.score }} | Percentage: {{ item.percentage }}%
+        {% endif %}
+      </span>
+    {% elif item.status == 'failed' %}
+      <span style="color:red;">❌ Failed
+        {% if item.score is not None and item.percentage is not None %}
+          | Score: {{ item.score }} | Percentage: {{ item.percentage }}%
+        {% endif %}
+      </span>
+    {% endif %}
+
+    <!-- ✨ Step 3: Start Quiz Button -->
+    {% if item.can_start %}
+      <br>
+      <a href="{% url 'quiz' item.video.id %}" class="btn btn-primary">🎬 Start Quiz</a>
+    {% endif %}
+  </div>
+{% endfor %}
+
+{% if not video_data %}
+  <p>No videos available.</p>
+{% endif %}
+
 {% endblock %}

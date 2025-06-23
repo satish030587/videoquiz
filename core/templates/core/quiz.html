@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<h3>📹 Video {{ video_position }} of {{ video_total }} – {{ video.title }}</h3>
+
+<video width="640" height="360" controls>
+  <source src="{{ video.video_file.url }}" type="video/mp4">
+  Your browser does not support HTML video.
+</video>
+
+<div>Time left: <span id="timer">{{ remaining }}</span> seconds</div>
+
+<h3>Question {{ question.order }}: {{ question.text_raw }}</h3>
+
+<form id="quiz-form" method="post">
+  {% csrf_token %}
+  {% for answer in answers %}
+    <div>
+      <input type="radio" name="selected_answer" value="{{ answer.id }}" id="answer{{ answer.id }}">
+      <label for="answer{{ answer.id }}">{{ answer.text }}</label>
+    </div>
+  {% endfor %}
+  <input type="hidden" id="q_index" name="q_index" value="{{ q_index }}">
+  <div style="margin-top: 10px;">
+    <input type="hidden" name="video_id" value="{{ video.id }}">
+    <input type="hidden" name="question_id" value="{{ question.id }}">  
+    <button type="submit" name="prev-btn" id="prev-btn" {% if prev_index is None %}disabled{% endif %}>Previous</button>
+    <button type="submit" name="next-btn" id="next-btn" {%if next_index is None %}disabled{% endif %}>Next</button>
+    <button type="submit" name="submit-btn" id="submit-btn" disabled>Submit</button>
+  </div>
+</form>
+
+<script>
+  // Timer logic
+  let timeLeft = parseInt("{{ remaining|default:0 }}");
+  let timerElement = document.getElementById('timer');
+  let interval = setInterval(() => {
+    if (timeLeft <= 0) {
+      clearInterval(interval);
+      document.getElementById('quiz-form').submit(); // Auto-submit on timeout
+    } else {
+      timerElement.textContent = timeLeft;
+      timeLeft--;
+    }
+  }, 1000);
+
+  // Enable submit button when an answer is selected
+  document.querySelectorAll('input[name="selected_answer"]').forEach(function(radio) {
+    radio.addEventListener('change', function() {
+      document.getElementById('submit-btn').disabled = false;
+    });
+  });
+
+  // Next button logic
+  document.getElementById('next-btn').onclick = function() {
+    let currentQ = parseInt(document.getElementById('q_index').value);
+    let nextQ = currentQ + 1;
+    window.location.href = "?q=" + (nextQ + 1);
+  };
+
+  document.getElementById('prev-btn').onclick = function() {
+  let currentQ = parseInt(document.getElementById('q_index').value);
+  let prevQ = currentQ - 1;
+  if (prevQ >= 0) {
+    window.location.href = "?q=" + (prevQ + 1);
+  }
+};
+</script>
+
+{% endblock %}

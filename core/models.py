@@ -61,13 +61,33 @@ class Answer(models.Model):
         return f"{self.text} ({'✔' if self.is_correct else '✘'})"
 
 class VideoProgress(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    video = models.ForeignKey(Video, on_delete=models.CASCADE)
-    score = models.IntegerField(default=0)
+    STATUS_CHOICES = [
+        ('not_attempted', 'Not Attempted'),
+        ('passed',        'Passed'),
+        ('failed',        'Failed'),
+    ]
+
+    user       = models.ForeignKey(User, on_delete=models.CASCADE)
+    video      = models.ForeignKey(Video, on_delete=models.CASCADE)
+    status     = models.CharField(max_length=20, choices=STATUS_CHOICES, default='not_attempted')  # ← here
+    score      = models.FloatField(null=True, blank=True)
     percentage = models.FloatField(default=0.0)
-    passed = models.BooleanField(default=False)
+    passed     = models.BooleanField(default=False)
     attempt_time = models.DateTimeField(auto_now_add=True)
-    completed = models.BooleanField(default=False)
+    started_at = models.DateTimeField(null=True, blank=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    answers = models.JSONField(default=dict, blank=True)  # Store user's answers as a JSON object
+    time_taken = models.PositiveIntegerField(default=0)  # Time taken in seconds
+    completed  = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.user.username} - {self.video.title} - {'Passed' if self.passed else 'Failed'}"
+    
+class certificate(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    issue_date = models.DateTimeField(auto_now_add=True)
+    file = models.FileField(upload_to='certificates/', null=True, blank=True)
+
+    def __str__(self):
+        return f"Certificate for {self.user.username} issued on {self.issue_date.strftime('%Y-%m-%d')}"
+    
