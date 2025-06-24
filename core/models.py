@@ -65,6 +65,9 @@ class VideoProgress(models.Model):
         ('not_attempted', 'Not Attempted'),
         ('passed',        'Passed'),
         ('failed',        'Failed'),
+        ('in_progress',   'In Progress'),
+        ('submitted',     'Submitted'),
+        ('timeout',       'Timeout'),
     ]
 
     user       = models.ForeignKey(User, on_delete=models.CASCADE)

@@ -4,9 +4,11 @@ from .forms import RegisterForm
 from .models import Video, Question, Answer, VideoProgress
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from .forms import QuizAnswerForm
 from django.contrib import messages
+from reportlab.pdfgen import canvas
+import io
 
 def register_view(request):
     if request.method == 'POST':
@@ -19,6 +21,8 @@ def register_view(request):
     return render(request, 'core/register.html', {'form': form})
 
 def login_view(request):
+    if request.user.is_authenticated:
+        return redirect('dashboard')
     if request.method == 'POST':
         username = request.POST['username']
         password = request.POST['password']
@@ -90,7 +94,9 @@ def quiz_view(request, video_id):
 
     questions = Question.objects.filter(video=video).order_by('order')
     q_index = int(request.GET.get('q', 1)) - 1  # Convert to zero-based index
-    if q_index < 0 or q_index >= questions.count():
+    if q_index < 0:
+        q_index = 0  # Stay on the first question
+    if q_index >= questions.count():
         return redirect('dashboard')
 
     question = questions[q_index]
@@ -101,16 +107,15 @@ def quiz_view(request, video_id):
         messages.error(request, "You have already attempted this quiz.")
         return redirect('dashboard')
 
-    #Timer Logic
+    # Timer Logic
     if not progress.started_at:
         progress.started_at = timezone.now()
-        progress.save()  
+        progress.save()
     time_limit = video.quiz_timer_seconds
     elapsed = (timezone.now() - progress.started_at).total_seconds()
     remaining = max(0, time_limit - int(elapsed))
 
-     # Handle answer submission (AJAX or POST)
- # Handle answer saving
+    # Handle answer saving and navigation
     if request.method == 'POST':
         selected_answer = request.POST.get('selected_answer')
         question_id = request.POST.get('question_id')
@@ -118,7 +123,7 @@ def quiz_view(request, video_id):
             progress.answers[str(question_id)] = int(selected_answer)
             progress.save()
 
-         # If submit button pressed
+        # If submit button pressed
         if 'submit-btn' in request.POST:
             unanswered = []
             for q in questions:
@@ -138,7 +143,7 @@ def quiz_view(request, video_id):
                 progress.score = score
                 progress.percentage = percentage
                 progress.ended_at = timezone.now()
-                progress.status = 'passed' if percentage >= 60 else 'failed'  # Set your pass mark
+                progress.status = 'passed' if percentage >= 60 else 'failed'
                 progress.save()
 
                 # Unlock next video if passed, block others if failed
@@ -147,29 +152,83 @@ def quiz_view(request, video_id):
                     if next_video:
                         VideoProgress.objects.get_or_create(user=user, video=next_video)
                 else:
-                    # Block all other videos
                     VideoProgress.objects.filter(user=user, video__order__gt=video.order).update(status='failed')
+
+                # Prepare result details
+                result_details = []
+                for q in questions:
+                    user_ans_id = progress.answers.get(str(q.id))
+                    user_answer = Answer.objects.filter(id=user_ans_id, question=q).first() if user_ans_id else None
+                    correct_answers = Answer.objects.filter(question=q, is_correct=True)
+                    result_details.append({
+                        'question': q,
+                        'user_answer': user_answer,
+                        'correct_answers': correct_answers,
+                        'is_correct': user_answer in correct_answers if user_answer else False,
+                    })
 
                 return render(request, 'core/quiz_result.html', {
                     'video': video,
                     'score': score,
                     'percentage': percentage,
                     'status': progress.status,
+                    'result_details': result_details,
                 })
-            
-        # If timer expired, auto-submit
+
+        # If timer expired, auto-submit and show result
         if remaining <= 0:
-            progress.status = 'submitted'
+            # Grade quiz on timeout
+            correct = 0
+            for q in questions:
+                user_ans_id = progress.answers.get(str(q.id))
+                if user_ans_id and Answer.objects.filter(id=user_ans_id, question=q, is_correct=True).exists():
+                    correct += 1
+            score = correct
+            percentage = (score / len(questions)) * 100
+            progress.score = score
+            progress.percentage = percentage
             progress.ended_at = timezone.now()
+            progress.status = 'passed' if percentage >= 60 else 'failed'
             progress.save()
-            return redirect('dashboard')
-        
-         # If Next/Previous, redirect to next/prev question
+
+            # Unlock next video if passed, block others if failed
+            if progress.status == 'passed':
+                next_video = Video.objects.filter(order=video.order + 1).first()
+                if next_video:
+                    VideoProgress.objects.get_or_create(user=user, video=next_video)
+            else:
+                VideoProgress.objects.filter(user=user, video__order__gt=video.order).update(status='failed')
+
+            # Prepare result details
+            result_details = []
+            for q in questions:
+                user_ans_id = progress.answers.get(str(q.id))
+                user_answer = Answer.objects.filter(id=user_ans_id, question=q).first() if user_ans_id else None
+                correct_answers = Answer.objects.filter(question=q, is_correct=True)
+                result_details.append({
+                    'question': q,
+                    'user_answer': user_answer,
+                    'correct_answers': correct_answers,
+                    'is_correct': user_answer in correct_answers if user_answer else False,
+                })
+
+            return render(request, 'core/quiz_result.html', {
+                'video': video,
+                'score': score,
+                'percentage': percentage,
+                'status': progress.status,
+                'result_details': result_details,
+            })
+
+        # If Next/Previous, redirect to next/prev question
         if 'next-btn' in request.POST:
-            return redirect(f"{request.path}?q={q_index + 1}")
+            return redirect(f"{request.path}?q={q_index + 2}")
         if 'prev-btn' in request.POST:
-            return redirect(f"{request.path}?q={q_index - 1}")
-        
+            if q_index > 0:
+                return redirect(f"{request.path}?q={q_index}")
+            else:
+                return redirect(f"{request.path}?q=1")
+
     # Prepare context for rendering
     question = questions[q_index]
     answers = Answer.objects.filter(question=question).order_by('order')
@@ -187,14 +246,32 @@ def quiz_view(request, video_id):
         'next_index': q_index + 1 if q_index < questions.count() - 1 else None,
     })
 
+@login_required
+def certificate_view(request):
+    user = request.user
+    videos = Video.objects.all().order_by('order')
+    progresses = VideoProgress.objects.filter(user=user, video__in=videos)
+    if progresses.count() != videos.count() or any(vp.status != 'passed' for vp in progresses):
+        messages.error(request, "You must pass all quizzes to download the certificate.")
+    return redirect('dashboard')
+
+    # Generate a simple PDF certificate (you can customize this)
+    buffer = io.BytesIO()
+    p = canvas.Canvas(buffer)
+    p.setFont("Helvetica-Bold", 20)
+    p.drawString(100, 750, "Certificate of Completion")
+    p.setFont("Helvetica", 14)
+    p.drawString(100, 700, f"This certifies that {user.get_full_name() or user.username}")
+    p.drawString(100, 680, "has successfully completed all video quizzes.")
+    p.drawString(100, 660, f"Date: {timezone.now().strftime('%Y-%m-%d')}")
+    p.showPage()
+    p.save()
+    buffer.seek(0)
+    return HttpResponse(buffer, content_type='application/pdf', headers={
+        'Content-Disposition': 'attachment; filename="certificate.pdf"'
+    })
 
 @login_required
 def submit_quiz_view(request, video_id):
-    # Grade quiz, update VideoProgress, unlock next video if passed
-    # If all videos passed, create certificate
-    pass
-
-@login_required
-def certificate_view(request):
-    # Allow download if all videos passed
-    pass
+    # You can implement this if needed, or just redirect for now
+    return redirect('dashboard')

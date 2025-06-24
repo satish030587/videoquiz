@@ -23,7 +23,7 @@ class QuestionAdmin(admin.ModelAdmin):
     inlines = [AnswerInline]
     list_display = ('text_raw', 'video', 'order', 'language', 'is_deleted')
     list_filter = ('video', 'language', 'is_deleted')
-    search_fields = ('text',)
+    search_fields = ('text_raw',)
 
 # Customize Video
 @admin.register(Video)

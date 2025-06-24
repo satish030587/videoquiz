@@ -10,6 +10,11 @@
 
 <div>Time left: <span id="timer">{{ remaining }}</span> seconds</div>
 
+<div style="margin: 10px 0;">
+  Progress: Question {{ q_index|add:1 }} of {{ total_questions }}
+  <progress value="{{ q_index|add:1 }}" max="{{ total_questions }}"></progress>
+</div>
+
 <h3>Question {{ question.order }}: {{ question.text_raw }}</h3>
 
 <form id="quiz-form" method="post">
@@ -65,6 +70,16 @@
     window.location.href = "?q=" + (prevQ + 1);
   }
 };
+</script>
+
+<script>
+document.getElementById('quiz-form').addEventListener('submit', function(e) {
+  const radios = document.querySelectorAll('input[type="radio"]:checked');
+  if (radios.length === 0) {
+    alert('Please select an answer before proceeding.');
+    e.preventDefault();
+  }
+});
 </script>
 
 {% endblock %}

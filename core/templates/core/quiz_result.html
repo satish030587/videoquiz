@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+{% block content %}
+  {% if status == 'passed' %}
+    <h2>Congratulations! You passed!</h2>
+  {% else %}
+    <h2>Quiz Complete. Better luck next time!</h2>
+  {% endif %}
+  <p>Score: {{ score }} / {{ result_details|length }}</p>
+  <p>Percentage: {{ percentage|floatformat:2 }}%</p>
+  <table>
+    <tr>
+      <th>Question</th>
+      <th>Your Answer</th>
+      <th>Correct Answer(s)</th>
+      <th>Result</th>
+    </tr>
+    {% for item in result_details %}
+      <tr>
+        <td>{{ item.question.text_raw }}</td>
+        <td>
+          {% if item.user_answer %}
+            {{ item.user_answer.text }}
+          {% else %}
+            Not answered
+          {% endif %}
+        </td>
+        <td>
+          {% if item.correct_answers %}
+            {% for ans in item.correct_answers %}
+              {{ ans.text }}{% if not forloop.last %}, {% endif %}
+            {% endfor %}
+          {% else %}
+            N/A
+          {% endif %}
+        </td>
+        <td>
+          {% if item.is_correct %}
+            ✔️
+          {% else %}
+            ❌
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+  </table>
+  <form method="get" action="{% url 'dashboard' %}">
+    <button type="submit">OK</button>
+  </form>
+{% endblock %}
