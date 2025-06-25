@@ -1,5 +1,6 @@
 from django.contrib import admin
 from .models import Video, Question, Answer, VideoProgress
+from django.utils.html import format_html
 
 # Inline answers for Question
 class AnswerInline(admin.TabularInline):
@@ -44,6 +45,13 @@ class VideoAdmin(admin.ModelAdmin):
 # Customize Progress Admin
 @admin.register(VideoProgress)
 class VideoProgressAdmin(admin.ModelAdmin):
-    list_display = ('user', 'video', 'score', 'percentage', 'passed', 'attempt_time')
+    list_display = ('user', 'video', 'score', 'percentage', 'passed_display', 'attempt_time')
+    def passed_display(self, obj):
+        if obj.status == 'passed':
+            return format_html("<span style='color: green;'>✔️</span>")
+        elif obj.status == 'failed':
+            return format_html("<span style='color: red;'>❌</span>")
+        return '-'
+    passed_display.short_description = 'Passed'
     list_filter = ('video', 'passed')
     search_fields = ('user__username', 'video__title')

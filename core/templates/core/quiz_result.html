@@ -1,49 +1,63 @@
 {% extends 'base.html' %}
 {% block content %}
-  {% if status == 'passed' %}
-    <h2>Congratulations! You passed!</h2>
-  {% else %}
-    <h2>Quiz Complete. Better luck next time!</h2>
-  {% endif %}
-  <p>Score: {{ score }} / {{ result_details|length }}</p>
-  <p>Percentage: {{ percentage|floatformat:2 }}%</p>
-  <table>
-    <tr>
-      <th>Question</th>
-      <th>Your Answer</th>
-      <th>Correct Answer(s)</th>
-      <th>Result</th>
-    </tr>
-    {% for item in result_details %}
-      <tr>
-        <td>{{ item.question.text_raw }}</td>
-        <td>
-          {% if item.user_answer %}
-            {{ item.user_answer.text }}
+<div class="container py-5">
+  <div class="card shadow p-4">
+    {% if status == 'passed' %}
+      <div class="alert alert-success text-center fs-4 fw-bold">
+        🎉 Congratulations, you have passed the quiz! 🎉
+      </div>
+    {% else %}
+      <div class="alert alert-danger text-center fs-4 fw-bold">
+        Quiz finished. Better luck next time!
+      </div>
+    {% endif %}
+
+    <p class="text-center">
+      <strong>Score:</strong> {{ score }} / {{ total }}<br>
+      <strong>Percentage:</strong> {{ percentage }}%
+    </p>
+    <hr>
+    <ul class="list-group">
+      {% for result in results %}
+        <li class="list-group-item">
+          <strong>Q{{ forloop.counter }}: {{ result.question.text_raw }}</strong><br>
+          Your answer:
+          {% if result.user_answer %}
+            <span class="{% if result.is_correct %}text-success fw-bold{% else %}text-danger fw-bold{% endif %}">
+              {{ result.user_answer.text }}
+            </span>
+            {% if not result.is_correct %}
+              <span class="ms-2 text-success">
+                (Correct: {{ result.correct_answer.text }})
+              </span>
+            {% endif %}
+            {% if result.is_correct %}
+              <span class="badge bg-success ms-2">Correct</span>
+            {% else %}
+              <span class="badge bg-danger ms-2">Incorrect</span>
+            {% endif %}
           {% else %}
-            Not answered
+            <span class="badge bg-warning text-dark">Not answered</span>
+            <span class="ms-2 text-success">
+              (Correct: {{ result.correct_answer.text }})
+            </span>
           {% endif %}
-        </td>
-        <td>
-          {% if item.correct_answers %}
-            {% for ans in item.correct_answers %}
-              {{ ans.text }}{% if not forloop.last %}, {% endif %}
-            {% endfor %}
-          {% else %}
-            N/A
-          {% endif %}
-        </td>
-        <td>
-          {% if item.is_correct %}
-            ✔️
-          {% else %}
-            ❌
-          {% endif %}
-        </td>
-      </tr>
-    {% endfor %}
-  </table>
-  <form method="get" action="{% url 'dashboard' %}">
-    <button type="submit">OK</button>
-  </form>
+        </li>
+      {% endfor %}
+    </ul>
+    <div class="mt-4 text-center">
+      <a href="{% url 'dashboard' %}" class="btn btn-primary btn-lg">Back to Dashboard</a>
+    </div>
+  </div>
+</div>
+{% if status == 'passed' %}
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <script>
+    confetti({
+      particleCount: 150,
+      spread: 70,
+      origin: { y: 0.6 }
+    });
+  </script>
+{% endif %}
 {% endblock %}
