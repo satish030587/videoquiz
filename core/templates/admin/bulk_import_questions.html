@@ -1,0 +1,38 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="content">
+    <h1>{{ title }}</h1>
+    
+    <div class="help-text">
+        <p>Upload a CSV file with questions and answers. 
+        <a href="{% url 'admin:download-question-template' %}">Download template</a> to see the required format.</p>
+        
+        <h3>Simplified CSV Format:</h3>
+        <ul>
+            <li><strong>question_text</strong>: The question text (required)</li>
+            <li><strong>question_type</strong>: multiple_choice, true_false, or single_choice (optional, defaults to multiple_choice)</li>
+            <li><strong>answer_1 to answer_4</strong>: Answer options (up to 4 answers)</li>
+            <li><strong>answer_1_correct to answer_4_correct</strong>: true/false for correct answers</li>
+        </ul>
+        
+        <h3>Note:</h3>
+        <ul>
+            <li>Difficulty will be set to "medium" by default</li>
+            <li>Points will be set to 1 by default</li>
+            <li>Explanation and hint will be empty by default</li>
+            <li>You can edit these values later in the admin interface</li>
+        </ul>
+    </div>
+    
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit" class="default">Import Questions</button>
+        <a href="../" class="button">Cancel</a>
+    </form>
+</div>
+{% endblock %}

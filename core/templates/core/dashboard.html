@@ -1,83 +1,579 @@
-{% extends 'base.html' %}
-{% block nav %}{% endblock %}
-{% block content %}
-
-{% if messages %}
-  <div class="container mt-3">
-    {% for message in messages %}
-      <div class="alert alert-warning alert-dismissible fade show shadow-sm" role="alert" style="font-size: 1.1rem; border-radius: 12px; font-weight: 500; letter-spacing: 0.5px;">
-        <span style="font-size: 1.3rem; vertical-align: middle;">&#9888;&#65039;</span>
-        {{ message }}
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-      </div>
-    {% endfor %}
-  </div>
-{% endif %}
-
-<div class="container py-5">
-  <!-- Welcome and Logout -->
-  <div class="d-flex justify-content-center align-items-center mb-4" style="gap: 1rem;">
-    <h2 class="fw-bold m-0" style="letter-spacing: 1px; font-size: 2.2rem;">
-      Welcome, <span style="color: #4f8cff;">{{ user.username }}</span>
-    </h2>
-    <a href="{% url 'logout' %}" class="btn btn-outline-danger btn-sm" style="border-radius: 8px; font-weight: 500;">
-      Logout
-    </a>
-  </div>
-
-  <!-- Certificate Button -->
-  {% if all_passed %}
-    <div class="text-center mb-4">
-      <a href="{% url 'certificate' %}" class="btn btn-success btn-lg mt-3 shadow" style="border-radius: 12px; font-weight: 600; letter-spacing: 1px;">
-        <span style="font-size: 1.3rem; vertical-align: middle;">&#127942;</span>
-        Download Certificate
-      </a>
-    </div>
-  {% endif %}
-
-  <!-- Stats Badges -->
-  <div class="row mb-4">
-    <div class="col text-center">
-      <span class="badge bg-success fs-6 mx-1">Passed: {{ stats.passed }}</span>
-      <span class="badge bg-danger fs-6 mx-1">Failed: {{ stats.failed }}</span>
-      <span class="badge bg-secondary fs-6 mx-1">Not Attempted: {{ stats.not_attempted }}</span>
-    </div>
-  </div>
-
-  <!-- Video Cards Grid -->
-  <div class="row g-4 justify-content-center">
-    {% for item in video_data %}
-      <div class="col-12 col-sm-6 col-md-4 col-lg-3 d-flex">
-        <div class="card shadow-sm h-100 w-100 d-flex flex-column" style="border-radius: 18px; min-height: 320px;">
-          <div class="card-body d-flex flex-column py-4">
-            <h5 class="card-title fw-bold">{{ item.video.title }}</h5>
-            <p class="card-text mb-2">{{ item.video.description|truncatewords:20 }}</p>
-            <div class="mb-2">
-              {% if item.status == 'passed' %}
-                <span class="badge bg-success">Passed</span>
-              {% elif item.status == 'failed' %}
-                <span class="badge bg-danger">Failed</span>
-              {% else %}
-                <span class="badge bg-secondary">Not Attempted</span>
-              {% endif %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Video Quiz</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        /* Navbar Styling */
+        .navbar-custom {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(102, 126, 234, 0.2);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+        
+        .navbar-brand {
+            color: #667eea !important;
+            font-weight: 700;
+            font-size: 1.5rem;
+        }
+        
+        .navbar-text {
+            color: #6c757d !important;
+            margin-right: 1rem;
+        }
+        
+        .btn-logout {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 10px;
+            color: white;
+            padding: 8px 20px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-logout:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+            color: white;
+        }
+        
+        /* Main Content */
+        .main-content {
+            padding: 2rem 0;
+        }
+        
+        /* Statistics Cards */
+        .stats-section {
+            margin-bottom: 3rem;
+        }
+        
+        .stat-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: none;
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            height: 100%;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+        }
+        
+        .stat-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1rem;
+            font-size: 1.5rem;
+            color: white;
+        }
+        
+        .stat-icon.total { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .stat-icon.passed { background: linear-gradient(135deg, #51cf66 0%, #40c057 100%); }
+        .stat-icon.failed { background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%); }
+        .stat-icon.pending { background: linear-gradient(135deg, #ffd43b 0%, #fab005 100%); }
+        .stat-icon.retries { background: linear-gradient(135deg, #339af0 0%, #228be6 100%); }
+        .stat-icon.average { background: linear-gradient(135deg, #9775fa 0%, #845ef7 100%); }
+        .stat-icon.completion { background: linear-gradient(135deg, #20c997 0%, #12b886 100%); }
+        
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-label {
+            color: #6c757d;
+            font-weight: 600;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        /* Video Progress Table */
+        .progress-section {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 2rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+        
+        .section-title {
+            color: #2d3748;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .table-custom {
+            border: none;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+        }
+        
+        .table-custom thead th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 1rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-size: 0.85rem;
+        }
+        
+        .table-custom tbody td {
+            border: none;
+            padding: 1rem;
+            vertical-align: middle;
+            background: white;
+        }
+        
+        .table-custom tbody tr {
+            border-bottom: 1px solid #f8f9fa;
+        }
+        
+        .table-custom tbody tr:hover {
+            background: #f8f9fa;
+        }
+        
+        /* Status Badges */
+        .status-badge {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .status-locked { background: #e9ecef; color: #6c757d; }
+        .status-not-attempted { background: #e3f2fd; color: #1976d2; }
+        .status-in-progress { background: #fff3e0; color: #f57c00; }
+        .status-passed { background: #e8f5e8; color: #2e7d32; }
+        .status-failed { background: #ffebee; color: #d32f2f; }
+        
+        /* Action Buttons */
+        .btn-action {
+            border-radius: 10px;
+            padding: 8px 20px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: all 0.3s ease;
+            border: none;
+        }
+        
+        .btn-start {
+            background: linear-gradient(135deg, #51cf66 0%, #40c057 100%);
+            color: white;
+        }
+        
+        .btn-start:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(64, 192, 87, 0.3);
+            color: white;
+        }
+        
+        .btn-retry {
+            background: linear-gradient(135deg, #339af0 0%, #228be6 100%);
+            color: white;
+        }
+        
+        .btn-retry:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(34, 139, 230, 0.3);
+            color: white;
+        }
+        
+        .btn-view {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-view:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+            color: white;
+        }
+        
+        .btn-disabled {
+            background: #e9ecef;
+            color: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        .btn-disabled:hover {
+            transform: none;
+            box-shadow: none;
+        }
+        
+        /* Certificate Section */
+        .certificate-section {
+            background: linear-gradient(135deg, #ffd43b 0%, #fab005 100%);
+            border-radius: 20px;
+            padding: 2rem;
+            text-align: center;
+            color: #333;
+            margin-top: 2rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+        
+        .certificate-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+        
+        .btn-certificate {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 15px;
+            color: white;
+            padding: 15px 30px;
+            font-weight: 600;
+            font-size: 1.1rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-certificate:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+            color: white;
+        }
+        
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .main-content {
+                padding: 1rem 0;
+            }
+            
+            .stat-card {
+                margin-bottom: 1rem;
+                padding: 1.5rem;
+            }
+            
+            .stat-value {
+                font-size: 2rem;
+            }
+            
+            .progress-section {
+                padding: 1.5rem;
+            }
+            
+            .table-responsive {
+                border-radius: 15px;
+            }
+        }
+        
+        .progress-bar-custom {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar navbar-expand-lg navbar-custom">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <i class="fas fa-play-circle me-2"></i>Video Quiz
+            </a>
+            
+            <div class="navbar-nav ms-auto d-flex align-items-center">
+                <span class="navbar-text">
+                    <i class="fas fa-user me-2"></i>
+                    Welcome, {{ user.first_name|default:user.username }}!
+                </span>
+                <a href="{% url 'logout' %}" class="btn btn-logout">
+                    <i class="fas fa-sign-out-alt me-2"></i>Logout
+                </a>
             </div>
-            <div class="mt-auto">
-              {% if item.can_start %}
-                <a href="{% url 'quiz' item.video.id %}" class="btn btn-primary w-100 mt-2" style="border-radius: 10px;">Start Quiz</a>
-              {% elif item.status == 'failed' %}
-                <a href="{% url 'quiz' item.video.id %}" class="btn btn-warning w-100 mt-2" style="border-radius: 10px;">Retry Quiz</a>
-              {% elif item.status == 'passed' %}
-                <button class="btn btn-outline-success w-100 mt-2" style="border-radius: 10px;" disabled>Completed</button>
-              {% endif %}
-            </div>
-          </div>
         </div>
-      </div>
-    {% empty %}
-      <div class="col-12">
-        <div class="alert alert-info text-center">No videos available.</div>
-      </div>
-    {% endfor %}
-  </div>
-</div>
-{% endblock %}
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container main-content">
+        <!-- Messages -->
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    <i class="fas fa-info-circle me-2"></i>{{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        <!-- Statistics Section -->
+        <div class="stats-section">
+            <h2 class="section-title">
+                <i class="fas fa-chart-line"></i>
+                Your Progress Overview
+            </h2>
+            
+            <div class="row g-4">
+                <div class="col-lg-3 col-md-6">
+                    <div class="stat-card">
+                        <div class="stat-icon total">
+                            <i class="fas fa-video"></i>
+                        </div>
+                        <div class="stat-value">{{ stats.total_videos }}</div>
+                        <div class="stat-label">Total Videos</div>
+                    </div>
+                </div>
+                
+                <div class="col-lg-3 col-md-6">
+                    <div class="stat-card">
+                        <div class="stat-icon passed">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                        <div class="stat-value">{{ stats.passed_count }}</div>
+                        <div class="stat-label">Passed Quizzes</div>
+                    </div>
+                </div>
+                
+                <div class="col-lg-3 col-md-6">
+                    <div class="stat-card">
+                        <div class="stat-icon failed">
+                            <i class="fas fa-times-circle"></i>
+                        </div>
+                        <div class="stat-value">{{ stats.failed_count }}</div>
+                        <div class="stat-label">Failed Quizzes</div>
+                    </div>
+                </div>
+                
+                <div class="col-lg-3 col-md-6">
+                    <div class="stat-card">
+                        <div class="stat-icon pending">
+                            <i class="fas fa-clock"></i>
+                        </div>
+                        <div class="stat-value">{{ stats.not_attempted_count }}</div>
+                        <div class="stat-label">Not Attempted</div>
+                    </div>
+                </div>
+                
+                <div class="col-lg-4 col-md-6">
+                    <div class="stat-card">
+                        <div class="stat-icon retries">
+                            <i class="fas fa-redo"></i>
+                        </div>
+                        <div class="stat-value">{{ stats.total_retries_remaining }}</div>
+                        <div class="stat-label">Retries Remaining</div>
+                    </div>
+                </div>
+                
+                <div class="col-lg-4 col-md-6">
+                    <div class="stat-card">
+                        <div class="stat-icon average">
+                            <i class="fas fa-star"></i>
+                        </div>
+                        <div class="stat-value">{{ stats.average_score }}%</div>
+                        <div class="stat-label">Average Score</div>
+                    </div>
+                </div>
+                
+                <div class="col-lg-4 col-md-6">
+                    <div class="stat-card">
+                        <div class="stat-icon completion">
+                            <i class="fas fa-trophy"></i>
+                        </div>
+                        <div class="stat-value">{{ stats.completion_percentage }}%</div>
+                        <div class="stat-label">Overall Completion</div>
+                        <div class="progress mt-2" style="height: 8px;">
+                            <div class="progress-bar progress-bar-custom" 
+                                 style="width: {{ stats.completion_percentage }}%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Video Progress Section -->
+        <div class="progress-section">
+            <h2 class="section-title">
+                <i class="fas fa-list-check"></i>
+                Video Quiz Progress
+            </h2>
+            
+            <div class="table-responsive">
+                <table class="table table-custom">
+                    <thead>
+                        <tr>
+                            <th>Video</th>
+                            <th>Status</th>
+                            <th>Attempts</th>
+                            <th>Score</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in video_data %}
+                        <tr>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <div class="me-3">
+                                        <i class="fas fa-play-circle fa-2x" 
+                                           style="color: {% if item.is_unlocked %}#667eea{% else %}#dee2e6{% endif %};"></i>
+                                    </div>
+                                    <div>
+                                        <h6 class="mb-1 fw-bold">{{ item.video.title }}</h6>
+                                        <small class="text-muted">
+                                            Timer: {{ item.video.quiz_timer_seconds }}s | 
+                                            Pass: {{ item.video.passing_score }}%
+                                        </small>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="status-badge status-{{ item.status }}">
+                                    {% if item.status == 'locked' %}
+                                        <i class="fas fa-lock me-1"></i>Locked
+                                    {% elif item.status == 'not_attempted' %}
+                                        <i class="fas fa-clock me-1"></i>Not Attempted
+                                    {% elif item.status == 'in_progress' %}
+                                        <i class="fas fa-spinner me-1"></i>In Progress
+                                    {% elif item.status == 'passed' %}
+                                        <i class="fas fa-check me-1"></i>Passed
+                                    {% elif item.status == 'failed' %}
+                                        <i class="fas fa-times me-1"></i>Failed
+                                    {% endif %}
+                                </span>
+                            </td>
+                            <td>
+                                <div>
+                                    <strong>{{ item.attempts_used }} / {{ item.max_attempts }}</strong>
+                                    <br>
+                                    <small class="text-muted">
+                                        {{ item.retries_remaining }} retries left
+                                    </small>
+                                </div>
+                            </td>
+                            <td>
+                                {% if item.percentage is not None %}
+                                    <div>
+                                        <strong class="{% if item.percentage >= item.video.passing_score %}text-success{% else %}text-danger{% endif %}">
+                                            {{ item.percentage|floatformat:1 }}%
+                                        </strong>
+                                        <br>
+                                        <small class="text-muted">
+                                            Best: {{ item.best_score }}%
+                                        </small>
+                                    </div>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if item.status == 'locked' %}
+                                    <button class="btn btn-action btn-disabled" disabled>
+                                        <i class="fas fa-lock me-1"></i>Locked
+                                    </button>
+                                {% elif item.can_start %}
+                                    <a href="{% url 'quiz' item.video.id %}" class="btn btn-action btn-start">
+                                        <i class="fas fa-play me-1"></i>Start Quiz
+                                    </a>
+                                {% elif item.can_retry %}
+                                    <a href="{% url 'retry_quiz' item.video.id %}" class="btn btn-action btn-retry">
+                                        <i class="fas fa-redo me-1"></i>Retry
+                                    </a>
+                                {% elif item.status == 'passed' %}
+                                    <a href="{% url 'quiz_result' item.video.id %}" class="btn btn-action btn-view">
+                                        <i class="fas fa-eye me-1"></i>View Result
+                                    </a>
+                                {% else %}
+                                    <button class="btn btn-action btn-disabled" disabled>
+                                        <i class="fas fa-ban me-1"></i>No Retries
+                                    </button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center py-4">
+                                <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                                <h5 class="text-muted">No videos available</h5>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Certificate Section -->
+        {% if all_passed %}
+        <div class="certificate-section">
+            <div class="certificate-icon">
+                <i class="fas fa-certificate"></i>
+            </div>
+            <h3 class="fw-bold mb-3">Congratulations! 🎉</h3>
+            <p class="mb-4">You have successfully completed all video quizzes! Download your certificate below.</p>
+            <a href="{% url 'certificate' %}" class="btn btn-certificate">
+                <i class="fas fa-download me-2"></i>Download Certificate
+            </a>
+        </div>
+        {% endif %}
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Auto-hide alerts after 5 seconds
+        document.querySelectorAll('.alert').forEach(alert => {
+            setTimeout(() => {
+                alert.style.opacity = '0';
+                alert.style.transform = 'translateY(-10px)';
+                setTimeout(() => alert.remove(), 300);
+            }, 5000);
+        });
+
+        // Add hover effects to stat cards
+        document.querySelectorAll('.stat-card').forEach(card => {
+            card.addEventListener('mouseenter', function() {
+                this.style.transform = 'translateY(-5px) scale(1.02)';
+            });
+            
+            card.addEventListener('mouseleave', function() {
+                this.style.transform = 'translateY(0) scale(1)';
+            });
+        });
+
+        // Animate progress bar on load
+        window.addEventListener('load', function() {
+            const progressBar = document.querySelector('.progress-bar-custom');
+            if (progressBar) {
+                const width = progressBar.style.width;
+                progressBar.style.width = '0%';
+                setTimeout(() => {
+                    progressBar.style.transition = 'width 1.5s ease-in-out';
+                    progressBar.style.width = width;
+                }, 500);
+            }
+        });
+    </script>
+</body>
+</html>
