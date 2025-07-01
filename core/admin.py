@@ -1,13 +1,16 @@
 from django.contrib import admin
+from django.utils.html import format_html
+from django.urls import reverse
 from django.urls import path
 from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.http import HttpResponse
 from django.template.response import TemplateResponse
-import csv
+import csv, logging, openpyxl
 import io
 from .models import Video, Question, Answer, VideoProgress, Certificate
 from .forms import BulkQuestionImportForm, QuestionForm, AnswerInlineFormSet, VideoForm
+
 
 class AnswerInline(admin.TabularInline):
     model = Answer
@@ -21,8 +24,8 @@ class AnswerInline(admin.TabularInline):
 class QuestionAdmin(admin.ModelAdmin):
     form = QuestionForm
     inlines = [AnswerInline]
-    list_display = ['question_text_short', 'video', 'question_type', 'difficulty', 'points', 'is_active']
-    list_filter = ['video', 'question_type', 'difficulty', 'is_active', 'language']
+    list_display = ['question_text_short', 'video', 'question_type', 'is_active']
+    list_filter = ['video', 'question_type', 'is_active', 'language']
     search_fields = ['text_raw', 'video__title']
     ordering = ['video', 'order']
     
@@ -33,114 +36,126 @@ class QuestionAdmin(admin.ModelAdmin):
 @admin.register(Video)
 class VideoAdmin(admin.ModelAdmin):
     form = VideoForm
-    list_display = ['title', 'quiz_timer_seconds', 'max_attempts', 'passing_score', 'question_count', 'is_active', 'status']
+    list_display = ['title', 'quiz_timer_seconds', 'max_attempts', 'passing_score', 'question_count', 'bulk_import_link', 'is_active', 'status']
     list_filter = ['is_active', 'status', 'created_at']
     search_fields = ['title', 'description']
     ordering = ['order']
-    
-    change_list_template = "admin/video_changelist.html"
-    
+    change_list_template = "admin/core/video/video_changelist.html"
+
+    def bulk_import_link(self, obj):
+        from django.urls import reverse
+        if obj.pk:
+            url = reverse("admin:core_video_bulk_import_questions", args=[obj.pk])
+            return format_html('<a href="{}">Bulk Import Questions</a>', url)
+        return "-"
+    bulk_import_link.short_description = "Bulk Import"
+
     def get_urls(self):
         urls = super().get_urls()
-        custom_urls = [
-            path('bulk-import-questions/', self.bulk_import_questions, name='bulk-import-questions'),
-            path('download-template/', self.download_template, name='download-question-template'),
+        custom = [
+            path(
+                '<int:object_id>/bulk-import-questions/',
+                self.admin_site.admin_view(self.bulk_import_questions),
+                name='core_video_bulk_import_questions'
+            ),
+            path(
+            'download-question-template/',
+            self.admin_site.admin_view(self.download_template),
+            name='core_video_download_question_template'
+            ),
         ]
-        return custom_urls + urls
-    
+        return custom + urls
+
     def question_count(self, obj):
         return obj.questions.count()
     question_count.short_description = 'Questions'
-    
-    def bulk_import_questions(self, request):
+
+    def bulk_import_questions(self, request, object_id):
+        video = self.get_object(request, object_id)
         if request.method == 'POST':
             form = BulkQuestionImportForm(request.POST, request.FILES)
             if form.is_valid():
                 csv_file = form.cleaned_data['csv_file']
-                video = form.cleaned_data['video']
-                
-                # Process CSV
                 try:
-                    success_count = self.process_csv_import(csv_file, video)
-                    messages.success(request, f'Successfully imported {success_count} questions.')
-                    return redirect('..')
-                except Exception as e:
-                    messages.error(request, f'Error importing questions: {str(e)}')
+                    count = self.process_csv_import(csv_file, video)
+                    messages.success(request, f"Imported {count} questions successfully.")
+                    return redirect(reverse('admin:core_video_change', args=[object_id]))
+                except ValueError as e:
+                    messages.error(request, str(e))
+            else:
+                messages.error(request, form.errors.as_ul())
         else:
             form = BulkQuestionImportForm()
-        
+
         context = {
-            'form': form,
-            'title': 'Bulk Import Questions',
+            **self.admin_site.each_context(request),
             'opts': self.model._meta,
+            'form': form,
+            'video': video,
         }
-        return TemplateResponse(request, 'admin/bulk_import_questions.html', context)
-    
+        return TemplateResponse(
+            request,
+            "admin/core/video/bulk_import_questions.html",
+            context
+        )
+
     def process_csv_import(self, csv_file, video):
         csv_file.seek(0)
-        content = csv_file.read().decode('utf-8')
-        csv_data = csv.DictReader(io.StringIO(content))
-        
-        success_count = 0
-        for row in csv_data:
-            # Create question with default values for removed fields
-            question = Question.objects.create(
-                video=video,
-                text_raw=row['question_text'],
-                question_type=row.get('question_type', 'multiple_choice'),
-                difficulty='medium',  # Default value
-                points=1,  # Default value
-                explanation='',  # Default empty
-                hint='',  # Default empty
-                order=success_count + 1
+        content = csv_file.read().decode('utf-8-sig')
+        reader = csv.DictReader(io.StringIO(content))
+        required_headers = [
+            'question_text', 'question_type', 'answer_1','answer_1_correct', 'answer_2', 'answer_2_correct', 'answer_3', 'answer_3_correct', 'answer_4', 'answer_4_correct',
+        ]
+        print("DEBUG: CSV headers:", reader.fieldnames)
+        if reader.fieldnames != required_headers:
+            raise ValueError(
+                "CSV must contain these headers: " + ", ".join(required_headers)
             )
-            
-            # Create answers (only 4 answers)
-            for i in range(1, 5):  # Only 4 answers: answer_1 to answer_4
-                answer_text = row.get(f'answer_{i}', '')
-                if answer_text:
-                    is_correct = row.get(f'answer_{i}_correct', '').lower() in ['true', '1', 'yes']
-                    Answer.objects.create(
-                        question=question,
-                        text=answer_text,
-                        is_correct=is_correct,
-                        order=i
-                    )
-            
-            success_count += 1
-        
-        return success_count
-    
+
+        created = 0
+        for row in reader:
+            q = Question.objects.create(
+                video=video,
+                text_raw=row['question_text'].strip(),
+                question_type=row['question_type'].strip(),
+                order=Question.objects.filter(video=video).count() + 1
+            )
+            for i in range(1,5):
+                text = row[f'answer_{i}'].strip()
+                is_corr = str(row[f'answer_{i}_correct']).strip().lower() in ['true','1','yes']
+                Answer.objects.create(
+                    question=q,
+                    text=text,
+                    is_correct=is_corr,
+                    order=i
+                )
+            created += 1
+
+        return created
+
     def download_template(self, request):
-        response = HttpResponse(content_type='text/csv')
+        header = [
+            'question_text','question_type',
+            'answer_1','answer_1_correct',
+            'answer_2','answer_2_correct',
+            'answer_3','answer_3_correct',
+            'answer_4','answer_4_correct',
+        ]
+        example = [
+            'What is 2+2?', 'multiple_choice',
+            '3', 'False',
+            '4', 'True',
+            '5', 'False',
+            '6', 'False',
+        ]
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(header)
+        writer.writerow(example)
+        content = output.getvalue()
+        output.close()
+        response = HttpResponse(content, content_type='text/csv')
         response['Content-Disposition'] = 'attachment; filename="question_template.csv"'
-        
-        writer = csv.writer(response)
-        writer.writerow([
-            'question_text', 'question_type',
-            'answer_1', 'answer_1_correct',
-            'answer_2', 'answer_2_correct', 
-            'answer_3', 'answer_3_correct',
-            'answer_4', 'answer_4_correct'
-        ])
-        
-        # Add sample data
-        writer.writerow([
-            'What is Django?', 'multiple_choice',
-            'A web framework', 'true', 
-            'A database', 'false',
-            'A programming language', 'false', 
-            'An IDE', 'false'
-        ])
-        
-        writer.writerow([
-            'Is Python an interpreted language?', 'true_false',
-            'True', 'true', 
-            'False', 'false',
-            '', '', 
-            '', ''
-        ])
-        
         return response
 
 @admin.register(VideoProgress)

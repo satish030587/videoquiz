@@ -1,0 +1,30 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}{{ title }}{% endblock %}
+{% url 'admin:bulk-import-questions' %}
+
+{% block content %}
+<div class="content">
+    
+    <div class="help-text">
+        <p>Upload a CSV file with questions and answers. 
+        <a href="{% url 'admin:core_video_download_question_template' %}">Download template</a> to see the required format.</p>
+        
+        <h3>Simplified CSV Format:</h3>
+        <ul>
+            <li><strong>question_text</strong>: The question text (required)</li>
+            <li><strong>question_type</strong>: multiple_choice, true_false, or single_choice (optional, defaults to multiple_choice)</li>
+            <li><strong>answer_1 to answer_4</strong>: Answer options (up to 4 answers)</li>
+            <li><strong>answer_1_correct to answer_4_correct</strong>: true/false for correct answers</li>
+        </ul>
+    </div>
+    
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit" class="default">Import Questions</button>
+        <a href="../" class="button">Cancel</a>
+    </form>
+</div>
+{% endblock %}

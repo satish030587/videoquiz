@@ -56,7 +56,7 @@ class QuizAnswerForm(forms.Form):
 
 class BulkQuestionImportForm(forms.Form):
     csv_file = forms.FileField(
-        label='CSV File',
+        label='CSV File or Excel File',
         help_text='Upload a CSV file with questions and answers. See template for format.'
     )
     video = forms.ModelChoiceField(
@@ -67,15 +67,22 @@ class BulkQuestionImportForm(forms.Form):
     
     def clean_csv_file(self):
         file = self.cleaned_data['csv_file']
+        print("DEBUG: File name:", file.name)
         if not file.name.endswith('.csv'):
             raise forms.ValidationError('File must be a CSV file.')
         
         # Read and validate CSV structure
         file.seek(0)
-        content = file.read().decode('utf-8')
+        try:
+            content = file.read().decode('utf-8')
+        except UnicodeDecodeError as e:
+            raise forms.ValidationError(
+            f"File is not UTF-8 encoded. Please save your CSV as UTF-8. Error: {e}"
+        )
         csv_data = csv.reader(io.StringIO(content))
         
         headers = next(csv_data, None)
+        print("DEBUG: Headers from uploaded CSV:", headers)
         expected_headers = [
             'question_text', 'question_type', 
             'answer_1', 'answer_1_correct',
@@ -84,9 +91,9 @@ class BulkQuestionImportForm(forms.Form):
             'answer_4', 'answer_4_correct'
         ]
         
-        if not headers or not all(h in headers for h in expected_headers[:2]):
+        if headers != expected_headers:
             raise forms.ValidationError(
-                f'CSV must contain these headers: {", ".join(expected_headers)}'
+                f'CSV must contain these headers (in order): {", ".join(expected_headers)}'
             )
         
         file.seek(0)

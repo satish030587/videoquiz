@@ -17,4 +17,5 @@ urlpatterns = [
     path('quiz/<int:video_id>/result/', views.quiz_result_view, name='quiz_result'),
     path('quiz/<int:video_id>/submit/', views.submit_quiz_view, name='submit_quiz'),
     path('certificate/', views.certificate_view, name='certificate'),
+    
 ]

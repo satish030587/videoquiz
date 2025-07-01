@@ -18,7 +18,6 @@ class Video(models.Model):
     description = models.TextField()
     video_file = models.FileField(upload_to='videos/')
     order = models.PositiveIntegerField(default=0)
-    is_deleted = models.BooleanField(default=False)  # soft delete
     status = models.CharField(max_length=10, choices=VIDEO_STATUS, default='draft')
     quiz_timer_seconds = models.PositiveIntegerField(default=60)
     # New fields for enhanced functionality
@@ -53,14 +52,9 @@ class Question(models.Model):
 
     video = models.ForeignKey(Video, on_delete=models.CASCADE, related_name='questions')
     text_raw = models.TextField(verbose_name="Plain Question Text", null=True, blank=True)
-    # New enhanced fields
     question_type = models.CharField(max_length=20, choices=QUESTION_TYPES, default='multiple_choice')
     difficulty = models.CharField(max_length=10, choices=DIFFICULTY_LEVELS, default='medium')
-    points = models.IntegerField(default=1, validators=[MinValueValidator(1), MaxValueValidator(10)])
-    explanation = models.TextField(blank=True, help_text="Explanation shown after answering")
-    hint = models.TextField(blank=True)
     order = models.PositiveIntegerField(default=0)
-    is_deleted = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     language = models.CharField(max_length=5, choices=LANGUAGES, default='en')
 

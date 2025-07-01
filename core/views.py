@@ -490,7 +490,6 @@ def quiz_result_view(request, video_id):
             'user_answer': user_answer,
             'correct_answer': correct_answer,
             'is_correct': is_correct,
-            'points': question.points if is_correct else 0,
         })
 
     # Check if all videos are passed for certificate eligibility
