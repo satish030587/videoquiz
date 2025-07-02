@@ -78,18 +78,36 @@
 </div>
 
 <script>
-  // Timer logic
+
   let timeLeft = parseInt("{{ remaining|default:0 }}");
   let timerElement = document.getElementById('timer');
+  let videoId = "{{ video.id }}";
   let interval = setInterval(() => {
     if (timeLeft <= 0) {
       clearInterval(interval);
-      document.getElementById('quiz-form').submit(); // Auto-submit on timeout
+      document.getElementById('quiz-form').submit();
     } else {
       timerElement.textContent = timeLeft;
       timeLeft--;
     }
   }, 1000);
+
+  // Server sync every 30 seconds
+  setInterval(() => {
+    fetch(`/quiz/${videoId}/sync-timer/`)
+      .then(response => response.json())
+      .then(data => {
+        if (data.remaining !== undefined) {
+          let drift = Math.abs(data.remaining - timeLeft);
+          if (drift > 3) {
+            console.warn("Timer drift detected. Server says:", data.remaining, "Client says:", timeLeft);
+            timeLeft = data.remaining;
+            timerElement.textContent = timeLeft;
+          }
+        }
+      })
+      .catch(err => console.error("Timer sync error", err));
+  }, 30000);
 
   // Enable submit button if an answer is already selected on page load
   window.addEventListener('DOMContentLoaded', function() {

@@ -500,3 +500,18 @@ def retry_quiz_view(request, video_id):
     
     messages.info(request, f"Starting attempt {progress.attempts + 1} of {video.max_attempts}")
     return redirect('quiz', video_id=video.id)
+
+@login_required
+def sync_timer_view(request, video_id):
+    user = request.user
+    video = get_object_or_404(Video, id=video_id)
+    progress = VideoProgress.objects.filter(user=user, video=video).first()
+
+    if not progress or not progress.started_at:
+        return JsonResponse({'error': 'Quiz not started'}, status=400)
+
+    total_time = video.quiz_timer_seconds
+    elapsed = (timezone.now() - progress.started_at).total_seconds()
+    remaining = max(0, total_time - int(elapsed))
+
+    return JsonResponse({'remaining': remaining})
