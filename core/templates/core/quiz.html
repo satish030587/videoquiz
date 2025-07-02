@@ -23,6 +23,15 @@
             Time left: <span id="timer">{{ remaining }}</span> seconds
           </span>
         </div>
+        <div class="mb-3 text-center">
+          <div class="btn-group" role="group" aria-label="Question Navigation">
+            {% for i in question_range %}
+              <button type="button" class="btn btn-sm btn-outline-primary question-nav" data-index="{{ i }}">
+                {{ i|add:1 }}
+              </button>
+            {% endfor %}
+          </div>
+        </div>
         <div class="mb-3">
           <div class="d-flex align-items-center justify-content-between" style="gap: 1rem;">
             <span class="text-muted small">
@@ -47,15 +56,17 @@
                 <div class="alert alert-info">{{ question.hint }}</div>
               </div>
             {% endif %}
-            {% for answer in answers %}
-              <div class="form-check mb-2">
-                <input class="form-check-input" type="radio" name="selected_answer" value="{{ answer.id }}" id="answer{{ answer.id }}"
-                  {% if progress.answers|get_item:question.id == answer.id %}checked{% endif %}>
-                <label class="form-check-label" for="answer{{ answer.id }}" style="font-size: 1.1rem;">
-                  {{ answer.text }}
-                </label>
-              </div>
-            {% endfor %}
+            <div id="answer-container">
+              {% for answer in answers %}
+                <div class="form-check mb-2">
+                  <input class="form-check-input" type="radio" name="selected_answer" value="{{ answer.id }}" id="answer{{ answer.id }}"
+                    {% if progress.answers|get_item:question.id == answer.id %}checked{% endif %}>
+                  <label class="form-check-label" for="answer{{ answer.id }}" style="font-size: 1.1rem;">
+                    {{ answer.text }}
+                  </label>
+                </div>
+              {% endfor %}
+            </div>
           </div>
           <input type="hidden" name="video_id" value="{{ video.id }}">
           <input type="hidden" name="question_id" value="{{ question.id }}">
@@ -91,6 +102,23 @@
       timeLeft--;
     }
   }, 1000);
+
+  // ✅ Add this first so it's available to use in fetch headers
+  function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+      const cookies = document.cookie.split(';');
+      for (let cookie of cookies) {
+        cookie = cookie.trim();
+        if (cookie.startsWith(name + '=')) {
+          cookieValue = decodeURIComponent(cookie.slice(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
+  }
+
 
   // Server sync every 30 seconds
   setInterval(() => {
@@ -152,6 +180,92 @@ document.getElementById('quiz-form').addEventListener('submit', function(e) {
   }
 });
 
+
+
+function loadQuestion(index) {
+  fetch(`/quiz/${videoId}/get-question/?q_index=${index}`)
+    .then(response => response.json())
+    .then(data => {
+      if (data.error) {
+        alert(data.error);
+        return;
+      }
+
+        // Update question text
+        document.querySelector('h5.fw-bold').innerHTML = data.question_text;
+
+        // Update answers
+        const answerContainer = document.getElementById('answer-container');
+        answerContainer.innerHTML = ''; // Clear old answers
+        data.answers.forEach(answer => {
+          const checked = answer.is_selected ? 'checked' : '';
+          const answerHTML = `
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="radio" name="selected_answer" value="${answer.id}" id="answer${answer.id}" ${checked}>
+              <label class="form-check-label" for="answer${answer.id}" style="font-size: 1.1rem;">
+                ${answer.text}
+              </label>
+            </div>
+          `;
+          answerContainer.insertAdjacentHTML('beforeend', answerHTML);
+        });
+
+        // Attach change event to new radio buttons
+        document.querySelectorAll('input[name="selected_answer"]').forEach(radio => {
+          radio.addEventListener('change', function () {
+            const selectedAnswerId = this.value;
+            const questionId = document.querySelector('input[name="question_id"]').value;
+
+            fetch(`/quiz/${videoId}/save-answer/`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')  // Ensure this function exists
+              },
+              body: JSON.stringify({
+                question_id: questionId,
+                selected_answer: selectedAnswerId
+              })
+            })
+            .then(res => res.json())
+            .then(data => {
+              if (data.success) {
+                console.log('Answer saved.');
+              } else {
+                console.warn('Save failed:', data.error);
+              }
+            })
+            .catch(err => {
+              console.error("Save error", err);
+            });
+          });
+        });
+
+        // Update progress text and progress bar
+        document.querySelector('.text-muted.small').textContent = `Progress: Question ${data.q_index + 1} of ${data.total_questions}`;
+        document.querySelector('progress').value = data.q_index + 1;
+
+        // Update hidden inputs
+        document.getElementById('q_index').value = data.q_index;
+        document.querySelector('input[name="question_id"]').value = data.question_id;
+
+        // Update navigation buttons
+        document.getElementById('prev-btn').disabled = data.prev_index === null;
+        document.getElementById('next-btn').disabled = data.next_index === null;
+        document.getElementById('submit-btn').disabled = data.next_index !== null;
+      })
+      .catch(error => {
+        console.error("Error loading question:", error);
+      });
+  }
+
+  // Attach click event to all question-nav buttons
+document.addEventListener('click', function(e) {
+  if (e.target.classList.contains('question-nav')) {
+    const index = e.target.getAttribute('data-index');
+    loadQuestion(index);
+  }
+});
 
 </script>
 {% endblock %}

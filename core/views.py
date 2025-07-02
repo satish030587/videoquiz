@@ -6,13 +6,13 @@ from .models import Video, Question, Answer, VideoProgress, Certificate
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
 from django.http import JsonResponse, HttpResponse
-from .forms import QuizAnswerForm
 from django.contrib import messages
 from reportlab.pdfgen import canvas
 import io
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import inch
 from reportlab.lib import colors
+from django.views.decorators.csrf import csrf_exempt
+import json
 
 def register_view(request):
     if request.method == 'GET':
@@ -241,6 +241,7 @@ def quiz_view(request, video_id):
         'next_index': q_index + 1 if q_index < questions.count() - 1 else None,
         'attempts_left': video.max_attempts - progress.attempts,
         'max_attempts': video.max_attempts,
+        'question_range': range(questions.count()),
     })
 
 @login_required
@@ -476,6 +477,28 @@ def video_detail_view(request, video_id):
         'can_start_quiz': progress.attempts < video.max_attempts or progress.status == 'passed',
     })
 
+@csrf_exempt
+@login_required
+def save_answer_view(request, video_id):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            question_id = str(data.get('question_id'))
+            selected_answer = int(data.get('selected_answer'))
+
+            video = get_object_or_404(Video, id=video_id)
+            question = get_object_or_404(Question, id=question_id, video=video)
+            Answer.objects.get(id=selected_answer, question=question)  # Ensure valid
+
+            progress, _ = VideoProgress.objects.get_or_create(user=request.user, video=video)
+            progress.answers[question_id] = selected_answer
+            progress.save()
+
+            return JsonResponse({'success': True})
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)}, status=400)
+    return JsonResponse({'error': 'Invalid method'}, status=405)
+
 @login_required
 def retry_quiz_view(request, video_id):
     """Allow user to retry a failed quiz"""
@@ -515,3 +538,37 @@ def sync_timer_view(request, video_id):
     remaining = max(0, total_time - int(elapsed))
 
     return JsonResponse({'remaining': remaining})
+
+@login_required
+def get_question_data(request, video_id):
+    if request.method == 'GET':
+        try:
+            q_index = int(request.GET.get('q_index', 0))
+            video = get_object_or_404(Video, id=video_id)
+            questions = Question.objects.filter(video=video, is_active=True).order_by('order')
+            question = questions[q_index]
+            answers = Answer.objects.filter(question=question).order_by('order')
+
+            progress = VideoProgress.objects.get(user=request.user, video=video)
+            selected_id = progress.answers.get(str(question.id), None)
+
+            return JsonResponse({
+                'question_text': question.text_raw,
+                'question_id': question.id,
+                'q_index': q_index,
+                'total_questions': questions.count(),
+                'answers': [
+                    {
+                        'id': a.id,
+                        'text': a.text,
+                        'is_selected': (a.id == selected_id)
+                    } for a in answers
+                ],
+                'prev_index': q_index - 1 if q_index > 0 else None,
+                'next_index': q_index + 1 if q_index < questions.count() - 1 else None,
+            })
+
+        except IndexError:
+            return JsonResponse({'error': 'Invalid question index.'}, status=400)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
