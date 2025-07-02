@@ -100,6 +100,10 @@ def dashboard_view(request):
             status = 'locked'
             can_start = False
             can_retry = False
+        elif progress and progress.attempts >= video.max_attempts and progress.status != 'passed':
+            status = 'max_attempts'
+            can_start = False
+            can_retry = False
         elif not progress:
             status = 'not_attempted'
             can_start = True
@@ -155,23 +159,28 @@ def dashboard_view(request):
 @login_required
 def quiz_view(request, video_id):
     if request.method == 'GET':
-        # Clear any old messages
-        list(get_messages(request))
-    
+        list(get_messages(request))  # Clear any old messages
+
     user = request.user
     video = get_object_or_404(Video, id=video_id, is_active=True)
     progress, created = VideoProgress.objects.get_or_create(user=user, video=video)
 
-    # Check if user has exceeded max attempts
-    if progress.attempts >= video.max_attempts and progress.status != 'passed':
-        messages.error(request, f"You have reached the maximum number of attempts ({video.max_attempts}) for this quiz.")
-        return redirect('dashboard')
-    
-    # Check if user has already passed
+    # Only increment attempt when a new attempt is explicitly started
+    if progress.status not in ['in_progress', 'passed']:
+        if progress.attempts >= video.max_attempts:
+            messages.error(request, f"You have reached the maximum number of attempts ({video.max_attempts}) for this quiz.")
+            return redirect('dashboard')
+        progress.attempts += 1
+        progress.started_at = timezone.now()
+        progress.status = 'in_progress'
+        progress.answers = {}
+        progress.save()
+
+    # Already passed
     if progress.status == 'passed':
         messages.info(request, "You have already passed this quiz.")
         return redirect('quiz_result', video_id=video.id)
-    
+
     videos = list(Video.objects.filter(is_active=True, status='published').order_by('order'))
     current_index = videos.index(video) + 1
     total_videos = len(videos)
@@ -180,104 +189,44 @@ def quiz_view(request, video_id):
     if not questions.exists():
         messages.error(request, "No questions available for this video.")
         return redirect('dashboard')
-    
-    q_index = int(request.GET.get('q', 1)) - 1  # Convert to zero-based index
-    if q_index < 0:
-        q_index = 0  # Stay on the first question
-    if q_index >= questions.count():
-        return redirect('dashboard')
+
+    q_index = int(request.GET.get('q', 1)) - 1
+    q_index = max(0, min(q_index, questions.count() - 1))
 
     question = questions[q_index]
     answers = Answer.objects.filter(question=question).order_by('order')
 
-    # Timer Logic - Start new attempt if needed
-    if not progress.started_at or progress.status in ['failed', 'timeout']:
-        progress.started_at = timezone.now()
-        progress.attempts += 1  # Increment attempt count
-        progress.status = 'in_progress'
-        progress.answers = {}  # Reset answers for new attempt
-        progress.save()
-    
+    # Timer logic
     time_limit = video.quiz_timer_seconds
-    elapsed = (timezone.now() - progress.started_at).total_seconds()
+    elapsed = (timezone.now() - progress.started_at).total_seconds() if progress.started_at else 0
     remaining = max(0, time_limit - int(elapsed))
 
-    # Auto-submit if time expired
     if remaining <= 0:
         return redirect('auto_submit_quiz', video_id=video.id)
 
-    # Handle answer saving and navigation
+    # Handle POST
     if request.method == 'POST':
         selected_answer = request.POST.get('selected_answer')
         question_id = request.POST.get('question_id')
-        
+
         if question_id and selected_answer:
             progress.answers[str(question_id)] = int(selected_answer)
             progress.save()
 
-        # If submit button pressed
+        # Submit
         if 'submit-btn' in request.POST:
-            unanswered = []
-            for q in questions:
-                if str(q.id) not in progress.answers:
-                    unanswered.append(q.order)
-            
+            unanswered = [q.order for q in questions if str(q.id) not in progress.answers]
             if unanswered:
                 messages.error(request, f"Please answer all questions. Unanswered: {', '.join(map(str, unanswered))}")
-                return render(request, 'core/quiz.html', {
-                    'video': video,
-                    'video_position': current_index,
-                    'progress': progress,
-                    'remaining': remaining,
-                    'video_total': total_videos,
-                    'question': question,
-                    'answers': answers,
-                    'q_index': q_index,
-                    'total_questions': questions.count(),
-                    'prev_index': q_index - 1 if q_index > 0 else None,
-                    'next_index': q_index + 1 if q_index < questions.count() - 1 else None,
-                    'attempts_left': video.max_attempts - progress.attempts,
-                    'max_attempts': video.max_attempts,
-                })
             else:
-                # Grade quiz with points system
-                correct = 0
-                total_points = 0
-                earned_points = 0
-                
-                for q in questions:
-                    total_points += q.points
-                    user_ans_id = progress.answers.get(str(q.id))
-                    if user_ans_id and Answer.objects.filter(id=user_ans_id, question=q, is_correct=True).exists():
-                        correct += 1
-                        earned_points += q.points
-                
-                score = correct
-                percentage = (earned_points / total_points * 100) if total_points > 0 else 0
-                progress.score = score
-                progress.percentage = percentage
-                progress.ended_at = timezone.now()
-                progress.status = 'passed' if percentage >= video.passing_score else 'failed'
-                progress.passed = percentage >= video.passing_score
-                
-                # Update best score
-                if percentage > progress.best_score:
-                    progress.best_score = int(percentage)
-                
-                progress.save()
+                return redirect('submit_quiz', video_id=video.id)
 
-                return redirect('quiz_result', video_id=video.id)
-
-        # If Next/Previous, redirect to next/prev question
+        # Navigation
         if 'next-btn' in request.POST:
             return redirect(f"{request.path}?q={q_index + 2}")
         if 'prev-btn' in request.POST:
-            if q_index > 0:
-                return redirect(f"{request.path}?q={q_index}")
-            else:
-                return redirect(f"{request.path}?q=1")
+            return redirect(f"{request.path}?q={q_index}") if q_index > 0 else redirect(f"{request.path}?q=1")
 
-    # Prepare context for rendering
     return render(request, 'core/quiz.html', {
         'video': video,
         'video_position': current_index,
@@ -306,32 +255,25 @@ def auto_submit_quiz(request, video_id):
     
     questions = Question.objects.filter(video=video, is_active=True).order_by('order')
     
-    # Grade quiz with points system
+    # Grade quiz WITHOUT points system
     correct = 0
-    total_points = 0
-    earned_points = 0
-    
     for q in questions:
-        total_points += q.points
         user_ans_id = progress.answers.get(str(q.id))
         if user_ans_id and Answer.objects.filter(id=user_ans_id, question=q, is_correct=True).exists():
             correct += 1
-            earned_points += q.points
-    
-    score = correct
-    percentage = (earned_points / total_points * 100) if total_points > 0 else 0
-    progress.score = score
+
+    percentage = (correct / questions.count() * 100) if questions.count() > 0 else 0
+    progress.score = correct
     progress.percentage = percentage
     progress.ended_at = timezone.now()
     progress.status = 'timeout'
     progress.passed = percentage >= video.passing_score
-    
+
     # Update best score
     if percentage > progress.best_score:
         progress.best_score = int(percentage)
-    
+
     progress.save()
-    
     messages.warning(request, "Time expired! Quiz has been automatically submitted.")
     return redirect('quiz_result', video_id=video.id)
 
@@ -430,41 +372,34 @@ def certificate_view(request):
 @login_required
 def submit_quiz_view(request, video_id):
     video = get_object_or_404(Video, id=video_id)
-    progress = VideoProgress.objects.get(user=request.user, video=video)
-    
-    if progress.status in ['passed', 'failed', 'submitted', 'timeout']:
-        return redirect('quiz_result', video_id=video_id)
-    
-    questions = Question.objects.filter(video=video, is_active=True)
-    
-    # Grade quiz with points system
-    correct_count = 0
-    total_points = 0
-    earned_points = 0
+    progress = get_object_or_404(VideoProgress, user=request.user, video=video)
 
+    if progress.status not in ['in_progress']:
+        return redirect('quiz_result', video_id=video_id)
+
+    questions = Question.objects.filter(video=video, is_active=True)
+
+    # Grade
+    correct_count = 0
     for question in questions:
-        total_points += question.points
         user_answer_id = progress.answers.get(str(question.id))
         if user_answer_id and Answer.objects.filter(id=user_answer_id, question=question, is_correct=True).exists():
             correct_count += 1
-            earned_points += question.points
 
-    percentage = (earned_points / total_points * 100) if total_points > 0 else 0
+    percentage = (correct_count / questions.count() * 100) if questions.exists() else 0
 
-    # Save score and percentage to progress
+    # Update progress
     progress.score = correct_count
     progress.percentage = percentage
     progress.status = 'passed' if percentage >= video.passing_score else 'failed'
     progress.passed = percentage >= video.passing_score
     progress.ended_at = timezone.now()
-    
-    # Update best score
+
     if percentage > progress.best_score:
         progress.best_score = int(percentage)
-    
+
     progress.save()
 
-    # Redirect to result page
     return redirect('quiz_result', video_id=video_id)
 
 @login_required
@@ -560,6 +495,7 @@ def retry_quiz_view(request, video_id):
     progress.started_at = None
     progress.answers = {}
     progress.status = 'not_attempted'
+    progress.ended_at = None
     progress.save()
     
     messages.info(request, f"Starting attempt {progress.attempts + 1} of {video.max_attempts}")

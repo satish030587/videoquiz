@@ -20,7 +20,6 @@ class Video(models.Model):
     order = models.PositiveIntegerField(default=0)
     status = models.CharField(max_length=10, choices=VIDEO_STATUS, default='draft')
     quiz_timer_seconds = models.PositiveIntegerField(default=60)
-    # New fields for enhanced functionality
     max_attempts = models.IntegerField(default=2, validators=[MinValueValidator(1), MaxValueValidator(5)])
     passing_score = models.IntegerField(default=60, validators=[MinValueValidator(1), MaxValueValidator(100)])
     is_active = models.BooleanField(default=True)

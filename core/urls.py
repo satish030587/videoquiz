@@ -18,5 +18,5 @@ urlpatterns = [
     path('quiz/<int:video_id>/submit/', views.submit_quiz_view, name='submit_quiz'),
     path('quiz/<int:video_id>/retry/', views.retry_quiz_view, name='retry_quiz'),
     path('certificate/', views.certificate_view, name='certificate'),
-    
+    path('quiz/<int:video_id>/auto-submit/', views.auto_submit_quiz, name='auto_submit_quiz'),
 ]
