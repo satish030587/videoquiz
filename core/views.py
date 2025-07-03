@@ -497,8 +497,11 @@ def save_answer_view(request, video_id):
             # ✅ Count how many are answered
             questions = Question.objects.filter(video=video, is_active=True)
             answered_count = sum(1 for q in questions if str(q.id) in progress.answers)
-
-            return JsonResponse({'success': True})
+            return JsonResponse({
+                "success": True,
+                "answered_count": answered_count,
+            })
+        
         except Exception as e:
             return JsonResponse({'success': False, 'error': str(e)}, status=400)
     return JsonResponse({'error': 'Invalid method'}, status=405)
@@ -556,11 +559,15 @@ def get_question_data(request, video_id):
             progress = VideoProgress.objects.get(user=request.user, video=video)
             selected_id = progress.answers.get(str(question.id), None)
 
+            # ✅ Add this to count how many questions are answered
+            answered_count = sum(1 for q in questions if str(q.id) in progress.answers)
+
             return JsonResponse({
                 'question_text': question.text_raw,
                 'question_id': question.id,
                 'q_index': q_index,
                 'total_questions': questions.count(),
+                'answered_count': answered_count,
                 'answers': [
                     {
                         'id': a.id,
