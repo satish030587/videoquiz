@@ -494,6 +494,10 @@ def save_answer_view(request, video_id):
             progress.answers[question_id] = selected_answer
             progress.save()
 
+            # ✅ Count how many are answered
+            questions = Question.objects.filter(video=video, is_active=True)
+            answered_count = sum(1 for q in questions if str(q.id) in progress.answers)
+
             return JsonResponse({'success': True})
         except Exception as e:
             return JsonResponse({'success': False, 'error': str(e)}, status=400)

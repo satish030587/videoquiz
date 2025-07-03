@@ -1,98 +1,162 @@
-{% extends 'base.html' %}
-{% block nav %}{% endblock %}
-{% block content %}
-{% load quiz_extras %}
 
-<div class="container py-5">
-  <div class="row justify-content-center">
-    <div class="col-lg-8">
-      <div class="card shadow p-4" style="border-radius: 20px;">
-        <div class="mb-3 text-center">
-          <h4 class="fw-bold mb-1" style="letter-spacing: 1px;">
-            📹 Video {{ video_position }} of {{ video_total }} – <span style="color: #4f8cff;">{{ video.title }}</span>
-          </h4>
-        </div>
-        <div class="mb-4 text-center">
-          <video width="100%" height="360" controls style="border-radius: 12px; box-shadow: 0 2px 12px #0001;">
+{% load static %}
+{% load quiz_extras %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Quiz</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+
+  <!-- Bootstrap 5 CDN -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="{% static 'css/quiz.css' %}">
+</head>
+<body>
+
+  <!-- Main Wrapper -->
+  <div class="container-fluid p-0">
+
+    <!-- Sticky Navbar -->
+<nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom sticky-top shadow-sm px-4">
+  <div class="container-fluid d-flex justify-content-between align-items-center">
+    
+    <!-- Left: Logo & Video Title -->
+    <div class="d-flex align-items-center">
+      <span class="navbar-brand fw-bold text-primary me-3">📘 QuizApp</span>
+      <span class="text-dark fw-semibold">{{ video.title }}</span>
+    </div>
+
+    <!-- Center: Large Timer -->
+    <div class="text-center">
+      <span class="fw-bold fs-4 text-warning">
+        ⏱ <span id="timer">{{ remaining }}</span>s
+      </span>
+    </div>
+
+    <!-- Right: User Icon, Name, Logout -->
+    <div class="d-flex align-items-center gap-3">
+      <i class="bi bi-person-circle fs-5 text-secondary"></i>
+      <span class="text-muted small">{{ request.user.get_full_name }}</span>
+      <a href="{% url 'logout' %}" class="btn btn-outline-dark btn-sm">Logout</a>
+    </div>
+
+  </div>
+</nav>
+
+    <!-- Body Layout -->
+    <div class="d-flex">
+    
+      <!-- Sticky Sidebar -->
+    <aside class="bg-white border-end p-3" id="quizSidebar">
+      <h6 class="fw-bold mb-3">Questions</h6>
+      <p id="answered-count-text" class="text-muted small">
+        Questions: <span id="answered-count" class="fw-bold text-primary">0</span> of <span id="total-count" class="fw-bold">{{ total_questions }}</span>
+      </p>
+      <div class="d-flex flex-wrap gap-2 mb-4">
+        {% for i in question_range %}
+          <button type="button" class="btn btn-sm {% if q_index == i %}btn-primary text-white{% else %}btn-outline-primary{% endif %} question-nav" data-index="{{ i }}">
+            {{ i|add:1 }}
+          </button>
+        {% endfor %}
+      </div>
+      <div class="text-muted small">Attempt {{ progress.attempts }} of {{ max_attempts }}</div>
+    </aside>
+
+      <!-- Quiz Content -->
+      <main class="flex-grow-1 p-4" style="margin-left: 240px; margin-top: 0px;">
+        <!-- Progress -->
+        <p class="text-muted small mb-2">Progress: Question {{ q_index|add:1 }} of {{ total_questions }}</p>
+        <progress class="form-range w-100 mb-4" value="{{ q_index|add:1 }}" max="{{ total_questions }}"></progress>
+
+        <!-- Video -->
+        <div class="mb-4">
+          <video controls class="w-100 rounded border">
             <source src="{{ video.video_file.url }}" type="video/mp4">
             Your browser does not support HTML video.
           </video>
         </div>
-        <div class="mb-2 text-end">
-          <span class="badge bg-warning text-dark">
-            Time left: <span id="timer">{{ remaining }}</span> seconds
-          </span>
-        </div>
-        <div class="mb-3 text-center">
-          <div class="btn-group" role="group" aria-label="Question Navigation">
-            {% for i in question_range %}
-              <button type="button" class="btn btn-sm btn-outline-primary question-nav" data-index="{{ i }}">
-                {{ i|add:1 }}
-              </button>
-            {% endfor %}
-          </div>
-        </div>
-        <div class="mb-3">
-          <div class="d-flex align-items-center justify-content-between" style="gap: 1rem;">
-            <span class="text-muted small">
-              Progress: Question {{ q_index|add:1 }} of {{ total_questions }}
-            </span>
-          </div>
-          <progress value="{{ q_index|add:1 }}" max="{{ total_questions }}" style="width: 100%; height: 16px; margin-top: 8px;"></progress>
-        </div>
-        <!-- Alert for no answer selected -->
-        <div id="answer-alert" class="alert alert-danger d-none" role="alert">
-          Please select an answer before submitting!
-        </div>
+
+        <!-- Question Form -->
         <form id="quiz-form" method="post">
           {% csrf_token %}
-          <div class="mb-4">
-            <h5 class="fw-bold mb-3" style="font-size: 1.25rem;">{{ question.text_raw }}</h5>
-            {% if question.hint %}
-              <button class="btn btn-link p-0" type="button" data-bs-toggle="collapse" data-bs-target="#hintBox">
-                <span class="badge bg-info text-dark">Show Hint</span>
-              </button>
-              <div class="collapse mt-2" id="hintBox">
-                <div class="alert alert-info">{{ question.hint }}</div>
-              </div>
-            {% endif %}
-            <div id="answer-container">
-              {% for answer in answers %}
-                <div class="form-check mb-2">
-                  <input class="form-check-input" type="radio" name="selected_answer" value="{{ answer.id }}" id="answer{{ answer.id }}"
+          <h5 class="fw-bold">{{ question.text_raw }}</h5>
+
+          {% if question.hint %}
+            <button type="button" class="btn btn-link p-0 text-decoration-none text-info" data-bs-toggle="collapse" data-bs-target="#hintBox">
+              💡 Show Hint
+            </button>
+            <div class="collapse mt-2" id="hintBox">
+              <div class="alert alert-info">{{ question.hint }}</div>
+            </div>
+          {% endif %}
+
+          <div id="answer-alert" class="alert alert-danger d-none mt-3">Please select an answer before submitting!</div>
+
+        <div id="answer-container" class="row row-cols-1 g-3">
+          {% for answer in answers %}
+            <div class="col">
+              <div class="card card-hover h-100" data-answer-card="{{ answer.id }}">
+                <div class="card-body d-flex align-items-center">
+                  <input class="form-check-input me-2" type="radio" name="selected_answer" value="{{ answer.id }}" id="answer{{ answer.id }}"
                     {% if progress.answers|get_item:question.id == answer.id %}checked{% endif %}>
-                  <label class="form-check-label" for="answer{{ answer.id }}" style="font-size: 1.1rem;">
+                  <label class="form-check-label w-100 mb-0" for="answer{{ answer.id }}">
                     {{ answer.text }}
                   </label>
                 </div>
-              {% endfor %}
+              </div>
             </div>
-          </div>
+          {% endfor %}
+        </div>
+          <!-- Hidden Inputs -->
           <input type="hidden" name="video_id" value="{{ video.id }}">
           <input type="hidden" name="question_id" value="{{ question.id }}">
           <input type="hidden" id="q_index" name="q_index" value="{{ q_index }}">
-          <div class="d-flex justify-content-between align-items-center mt-4" style="gap: 0.5rem;">
-            <button type="submit" name="prev-btn" id="prev-btn" class="btn btn-outline-secondary px-4" style="border-radius: 10px;" {% if prev_index is None %}disabled{% endif %}>
-              &#8592; Previous
-            </button>
-            <button type="submit" name="next-btn" id="next-btn" class="btn btn-primary px-4" style="border-radius: 10px;" {% if next_index is None %}disabled{% endif %}>
-              Next &#8594;
-            </button>
-            <button type="submit" name="submit-btn" id="submit-btn" class="btn btn-success px-4" style="border-radius: 10px;" {% if next_index is not None %}disabled{% endif %}>
-              <span style="font-size: 1.1rem;">&#10004;</span> Submit
-            </button>
-          </div>
+
+          <!-- Navigation Buttons -->
+        <div class="mt-4 d-flex justify-content-between align-items-center flex-wrap">
+          <button type="submit" name="prev-btn" id="prev-btn" class="btn btn-outline-secondary"
+            {% if prev_index is None %}disabled{% endif %}>← Previous</button>
+
+          <button type="submit" name="next-btn" id="next-btn" class="btn btn-primary mx-auto"
+            {% if next_index is None %}disabled{% endif %}>Next →</button>
+
+          <button type="submit" name="submit-btn" id="submit-btn" class="btn btn-success d-none">✔ Submit</button>
+        </div>
         </form>
-      </div>
+      </main>
     </div>
   </div>
-</div>
+<!-- Bootstrap JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
 
 <script>
-
+  const videoId = "{{ video.id }}";
   let timeLeft = parseInt("{{ remaining|default:0 }}");
-  let timerElement = document.getElementById('timer');
-  let videoId = "{{ video.id }}";
+  const timerElement = document.getElementById('timer');
+  const totalQuestions = Number("{{ total_questions|default:0 }}");
+  let answeredQuestions = Number("{{ answered_count|default:0 }}");
+  let currentQuestionIndex = Number("{{ q_index|default:0 }}");
+
+  // Get CSRF token
+  function getCookie(name) {
+    let cookieValue = null;
+    document.cookie.split(';').forEach(cookie => {
+      cookie = cookie.trim();
+      if (cookie.startsWith(name + '=')) {
+        cookieValue = decodeURIComponent(cookie.slice(name.length + 1));
+      }
+    });
+    return cookieValue;
+  }
+
+  // Countdown timer
   let interval = setInterval(() => {
     if (timeLeft <= 0) {
       clearInterval(interval);
@@ -103,169 +167,162 @@
     }
   }, 1000);
 
-  // ✅ Add this first so it's available to use in fetch headers
-  function getCookie(name) {
-    let cookieValue = null;
-    if (document.cookie && document.cookie !== '') {
-      const cookies = document.cookie.split(';');
-      for (let cookie of cookies) {
-        cookie = cookie.trim();
-        if (cookie.startsWith(name + '=')) {
-          cookieValue = decodeURIComponent(cookie.slice(name.length + 1));
-          break;
-        }
-      }
-    }
-    return cookieValue;
-  }
-
-
-  // Server sync every 30 seconds
+  // Sync with server every 30s
   setInterval(() => {
     fetch(`/quiz/${videoId}/sync-timer/`)
-      .then(response => response.json())
+      .then(res => res.json())
       .then(data => {
-        if (data.remaining !== undefined) {
-          let drift = Math.abs(data.remaining - timeLeft);
-          if (drift > 3) {
-            console.warn("Timer drift detected. Server says:", data.remaining, "Client says:", timeLeft);
-            timeLeft = data.remaining;
-            timerElement.textContent = timeLeft;
-          }
+        if (data.remaining !== undefined && Math.abs(data.remaining - timeLeft) > 3) {
+          timeLeft = data.remaining;
+          timerElement.textContent = timeLeft;
         }
-      })
-      .catch(err => console.error("Timer sync error", err));
+      });
   }, 30000);
 
-  // Enable submit button if an answer is already selected on page load
-  window.addEventListener('DOMContentLoaded', function() {
-    let submitBtn = document.getElementById('submit-btn');
-    let radios = document.querySelectorAll('input[name="selected_answer"]');
-    let anyChecked = document.querySelector('input[name="selected_answer"]:checked');
-    submitBtn.disabled = !anyChecked && submitBtn.disabled;
-    radios.forEach(function(radio) {
-      radio.addEventListener('change', function() {
-        submitBtn.disabled = false;
-      });
-    });
-  });
+  // Submit/Next/Previous logic
+  document.getElementById('quiz-form').addEventListener('submit', function (e) {
+    const btn = document.activeElement;
+    const isPrev = btn && btn.name === 'prev-btn';
+    const isNext = btn && btn.name === 'next-btn';
+    const checked = document.querySelector('input[name="selected_answer"]:checked');
+    const alertBox = document.getElementById('answer-alert');
 
-  // Prevent form submit if no answer is selected
-  document.getElementById('quiz-form').addEventListener('submit', function(e) {
-    let checked = document.querySelector('input[name="selected_answer"]:checked');
-    let alertBox = document.getElementById('answer-alert');
-    if (!checked) {
+    if (isPrev || isNext) {
+      e.preventDefault();
+      if (!isPrev && !checked) {
+        alertBox.classList.remove('d-none');
+        alertBox.scrollIntoView({ behavior: "smooth" });
+        return;
+      }
+      alertBox.classList.add('d-none');
+      const newIndex = currentQuestionIndex + (isNext ? 1 : -1);
+      if (newIndex >= 0 && newIndex < totalQuestions) loadQuestion(newIndex);
+    } else if (!checked) {
       e.preventDefault();
       alertBox.classList.remove('d-none');
-      alertBox.scrollIntoView({behavior: "smooth", block: "center"});
+      alertBox.scrollIntoView({ behavior: "smooth" });
     } else {
       alertBox.classList.add('d-none');
     }
   });
 
-document.getElementById('quiz-form').addEventListener('submit', function(e) {
-  // Only validate if the user is clicking Next or Submit (not Previous)
-  let activeElement = document.activeElement;
-  let isPrev = activeElement && activeElement.name === "prev-btn";
-  if (isPrev) return; // Allow going back without answering
+  // Load question via AJAX
+  function loadQuestion(index) {
+    fetch(`/quiz/${videoId}/get-question/?q_index=${index}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.error) return alert(data.error);
+        currentQuestionIndex = data.q_index;
 
-  let checked = document.querySelector('input[name="selected_answer"]:checked');
-  let alertBox = document.getElementById('answer-alert');
-  if (!checked) {
-    e.preventDefault();
-    alertBox.classList.remove('d-none');
-    alertBox.scrollIntoView({behavior: "smooth", block: "center"});
-  } else {
-    alertBox.classList.add('d-none');
-  }
-});
-
-
-
-function loadQuestion(index) {
-  fetch(`/quiz/${videoId}/get-question/?q_index=${index}`)
-    .then(response => response.json())
-    .then(data => {
-      if (data.error) {
-        alert(data.error);
-        return;
-      }
-
-        // Update question text
-        document.querySelector('h5.fw-bold').innerHTML = data.question_text;
-
-        // Update answers
-        const answerContainer = document.getElementById('answer-container');
-        answerContainer.innerHTML = ''; // Clear old answers
-        data.answers.forEach(answer => {
-          const checked = answer.is_selected ? 'checked' : '';
-          const answerHTML = `
-            <div class="form-check mb-2">
-              <input class="form-check-input" type="radio" name="selected_answer" value="${answer.id}" id="answer${answer.id}" ${checked}>
-              <label class="form-check-label" for="answer${answer.id}" style="font-size: 1.1rem;">
-                ${answer.text}
-              </label>
-            </div>
-          `;
-          answerContainer.insertAdjacentHTML('beforeend', answerHTML);
-        });
-
-        // Attach change event to new radio buttons
-        document.querySelectorAll('input[name="selected_answer"]').forEach(radio => {
-          radio.addEventListener('change', function () {
-            const selectedAnswerId = this.value;
-            const questionId = document.querySelector('input[name="question_id"]').value;
-
-            fetch(`/quiz/${videoId}/save-answer/`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': getCookie('csrftoken')  // Ensure this function exists
-              },
-              body: JSON.stringify({
-                question_id: questionId,
-                selected_answer: selectedAnswerId
-              })
-            })
-            .then(res => res.json())
-            .then(data => {
-              if (data.success) {
-                console.log('Answer saved.');
-              } else {
-                console.warn('Save failed:', data.error);
-              }
-            })
-            .catch(err => {
-              console.error("Save error", err);
-            });
-          });
-        });
-
-        // Update progress text and progress bar
-        document.querySelector('.text-muted.small').textContent = `Progress: Question ${data.q_index + 1} of ${data.total_questions}`;
+        // Update question
+        document.querySelector('h5.fw-bold').textContent = data.question_text;
+        document.querySelector('input[name="question_id"]').value = data.question_id;
+        document.getElementById('q_index').value = data.q_index;
         document.querySelector('progress').value = data.q_index + 1;
 
-        // Update hidden inputs
-        document.getElementById('q_index').value = data.q_index;
-        document.querySelector('input[name="question_id"]').value = data.question_id;
+        // Render answers
+        const container = document.getElementById('answer-container');
+        container.innerHTML = '';
+        data.answers.forEach(ans => {
+          container.insertAdjacentHTML('beforeend', `
+            <div class="col">
+              <div class="card card-hover h-100 ${ans.is_selected ? 'selected' : ''}" data-answer-card="${ans.id}">
+                <div class="card-body d-flex align-items-center">
+                  <input class="form-check-input me-2" type="radio" name="selected_answer" value="${ans.id}" id="answer${ans.id}" ${ans.is_selected ? 'checked' : ''}>
+                  <label class="form-check-label w-100 mb-0" for="answer${ans.id}">${ans.text}</label>
+                </div>
+              </div>
+            </div>
+          `);
+        });
 
-        // Update navigation buttons
-        document.getElementById('prev-btn').disabled = data.prev_index === null;
-        document.getElementById('next-btn').disabled = data.next_index === null;
-        document.getElementById('submit-btn').disabled = data.next_index !== null;
-      })
-      .catch(error => {
-        console.error("Error loading question:", error);
+        attachAnswerListeners();
+        updateNavButtons(data.prev_index, data.next_index);
+        highlightNav(index);
+        updateQuestionPositionDisplay(index);
+        updateAnsweredCountDisplay(data.answered_count);
+        updateSubmitVisibility();
       });
   }
 
-  // Attach click event to all question-nav buttons
-document.addEventListener('click', function(e) {
-  if (e.target.classList.contains('question-nav')) {
-    const index = e.target.getAttribute('data-index');
-    loadQuestion(index);
-  }
-});
+  function attachAnswerListeners() {
+    document.querySelectorAll('input[name="selected_answer"]').forEach(radio => {
+      radio.addEventListener('change', () => {
+        const questionId = document.querySelector('input[name="question_id"]').value;
+        fetch(`/quiz/${videoId}/save-answer/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken')
+          },
+          body: JSON.stringify({ question_id: questionId, selected_answer: radio.value })
+        }).then(res => res.json()).then(data => {
+          if (data.success && data.answered_count !== undefined) {
+            answeredQuestions = data.answered_count;
+            updateAnsweredCounter(answeredQuestions);
+            updateSubmitVisibility();
+          }
+        });
 
+        // Highlight selected card
+        document.querySelectorAll('.card-hover').forEach(c => c.classList.remove('selected'));
+        document.querySelector(`.card-hover[data-answer-card="${radio.value}"]`)?.classList.add('selected');
+      });
+    });
+  }
+
+  function updateNavButtons(prev, next) {
+    document.getElementById('prev-btn').disabled = prev === null;
+    document.getElementById('next-btn').disabled = next === null;
+  }
+
+  function highlightNav(index) {
+    document.querySelectorAll('.question-nav').forEach(btn => btn.classList.remove('btn-primary', 'text-white'));
+    document.querySelector(`.question-nav[data-index="${index}"]`)?.classList.add('btn-primary', 'text-white');
+  }
+
+  function updateQuestionPositionDisplay(index) {
+    const el = document.querySelector('#quizSidebar .text-muted.small[data-type="position"]');
+    if (el) {
+      el.textContent = `Questions: ${index + 1} of ${totalQuestions}`;
+      el.classList.add('text-primary', 'fw-semibold');
+      setTimeout(() => el.classList.remove('text-primary', 'fw-semibold'), 600);
+    }
+  }
+
+  function updateAnsweredCountDisplay(count) {
+    const el = document.querySelector('#quizSidebar .text-muted.small[data-type="answered"]');
+    if (el) el.textContent = `${count} of ${totalQuestions} answered`;
+  }
+
+  function updateSubmitVisibility() {
+    const btn = document.getElementById('submit-btn');
+    if (answeredQuestions >= totalQuestions) {
+      btn.classList.remove('d-none');
+      btn.disabled = false;
+    } else {
+      btn.classList.add('d-none');
+    }
+  }
+
+  function updateAnsweredCounter(newCount) {
+    const span = document.getElementById('answered-count');
+    if (parseInt(span.textContent) !== newCount) {
+      span.textContent = newCount;
+      span.classList.add('text-success', 'fw-bold', 'pulse-animation');
+      setTimeout(() => span.classList.remove('pulse-animation'), 500);
+    }
+  }
+
+  document.querySelectorAll('.question-nav').forEach(btn => {
+    btn.addEventListener('click', () => loadQuestion(parseInt(btn.getAttribute('data-index'))));
+  });
+
+  // On load
+  document.addEventListener('DOMContentLoaded', () => {
+    updateAnsweredCountDisplay(answeredQuestions);
+    updateQuestionPositionDisplay(currentQuestionIndex);
+    updateSubmitVisibility();
+    attachAnswerListeners();
+  });
 </script>
-{% endblock %}
